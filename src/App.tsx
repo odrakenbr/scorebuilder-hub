@@ -1,58 +1,47 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import Index from "./pages/Index";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import FormEditor from "./pages/FormEditor";
-import NotFound from "./pages/NotFound";
+// ARQUIVO: src/App.tsx (VERSÃO SIMPLIFICADA PARA TESTES)
 
-const queryClient = new QueryClient();
+import { Routes, Route, BrowserRouter } from 'react-router-dom';
+import Dashboard from './pages/Dashboard';
+import FormEditor from './pages/FormEditor';
+import Login from './pages/Login';
+import NotFound from './pages/NotFound';
+import ProtectedRoute from './components/ProtectedRoute'; // Corrigido o caminho
+import PublicForm from './pages/PublicForm';
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Login />} />
-            <Route 
-              path="/dashboard" 
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/forms/new" 
-              element={
-                <ProtectedRoute>
-                  <FormEditor />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/forms/edit/:id" 
-              element={
-                <ProtectedRoute>
-                  <FormEditor />
-                </ProtectedRoute>
-              } 
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  // Agora o App só precisa definir as rotas. Sem lógica de hostname.
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* ROTA PÚBLICA PARA OS FORMULÁRIOS */}
+        {/* O :subdomain é um parâmetro dinâmico que será capturado pelo useParams */}
+        <Route path="/form/:subdomain" element={<PublicForm />} />
+
+        {/* ROTAS PROTEGIDAS DO PAINEL ADMIN */}
+        <Route path="/login" element={<Login />} />
+        <Route 
+          path="/dashboard" 
+          element={<ProtectedRoute><Dashboard /></ProtectedRoute>} 
+        />
+        <Route 
+          path="/forms/new" 
+          element={<ProtectedRoute><FormEditor /></ProtectedRoute>} 
+        />
+        <Route 
+          path="/forms/edit/:id" 
+          // O FormEditor já usa useParams para pegar o :id, então isso funciona!
+          element={<ProtectedRoute><FormEditor /></ProtectedRoute>} 
+        />
+        
+        {/* Rota raiz e fallback */}
+        <Route 
+          path="/" 
+          element={<ProtectedRoute><Dashboard /></ProtectedRoute>} 
+        />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  );
+};
 
 export default App;

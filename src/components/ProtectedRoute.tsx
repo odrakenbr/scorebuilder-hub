@@ -1,28 +1,26 @@
-import { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+// ARQUIVO: src/components/ProtectedRoute.tsx (VERSÃO ATUALIZADA)
+
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ProtectedRouteProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
-export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { user, loading } = useAuth();
+const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
+  // Acessamos a 'session' que o seu AuthContext provê.
+  // Se o seu contexto usa 'user' em vez de 'session', troque a variável abaixo.
+  const { session } = useAuth(); 
+  const location = useLocation();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Carregando...</p>
-        </div>
-      </div>
-    );
+  // A lógica agora é mais simples:
+  // Se não há sessão, o usuário não está logado. Redireciona para o login.
+  if (!session) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (!user) {
-    return <Navigate to="/" replace />;
-  }
-
+  // Se existe uma sessão, o usuário está logado. Permite o acesso.
   return <>{children}</>;
 };
+
+export default ProtectedRoute;
