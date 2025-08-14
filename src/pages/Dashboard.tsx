@@ -72,11 +72,13 @@ const Dashboard = () => {
   }, [toast]); // Adicionado toast como dependência
 
   const handleViewForm = (subdomain: string) => {
-    // Para teste local. Isso NÃO vai funcionar até o deploy e configuração de domínio na Vercel.
-    const url = process.env.NODE_ENV === 'development'
-      ? `http://${subdomain}.localhost:5173` // Altere 5173 se sua porta for diferente
-      : `https://${subdomain}.leadscorer.com`; // TODO: Altere para seu domínio de produção
-    window.open(url, '_blank');
+    // Esta nova lógica constrói a URL correta para o ambiente atual.
+    // window.location.origin pega a base da URL atual
+    // (ex: "http://localhost:5173" ou "https://seu-projeto.vercel.app")
+    const url = `${window.location.origin}/form/${subdomain}`;
+    
+    // Abre a URL em uma nova aba
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleEditForm = (id: string) => {
