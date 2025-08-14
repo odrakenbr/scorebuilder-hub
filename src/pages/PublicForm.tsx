@@ -1,4 +1,4 @@
-// ARQUIVO NOVO: src/pages/PublicForm.tsx (VERSÃO "TYPEFORM")
+// ARQUIVO: src/pages/PublicForm.tsx (VERSÃO FINAL COM CAPTURA DE UTM)
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Database } from '@/types/supabase';
-import { motion, AnimatePresence } from 'framer-motion'; // Importamos a biblioteca de animação
-import { ArrowRight, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Check } from 'lucide-react';
 
 // Tipos (sem alteração)
 type AnswerOption = Database['public']['Tables']['answer_options']['Row'];
@@ -27,12 +27,31 @@ const PublicForm = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Estado para controlar as respostas e a pergunta atual
+  // Estados para controlar as respostas, a pergunta atual e os UTMs
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [utmData, setUtmData] = useState<Record<string, string>>({}); // << NOVO ESTADO PARA UTMs
 
   useEffect(() => {
-    const fetchForm = async () => {
+    // Esta função agora busca os dados do formulário E captura os parâmetros UTM
+    const fetchFormAndUtms = async () => {
+      setIsLoading(true);
+
+      // --- Início da Captura de UTMs ---
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const utms: Record<string, string> = {};
+        params.forEach((value, key) => {
+          if (key.startsWith('utm_')) {
+            utms[key] = value;
+          }
+        });
+        setUtmData(utms);
+      } catch (e) {
+        console.error("Erro ao capturar parâmetros UTM:", e);
+      }
+      // --- Fim da Captura de UTMs ---
+
       const { data, error } = await supabase
         .from('forms')
         .select('*, questions(*, answer_options(*))')
@@ -43,13 +62,13 @@ const PublicForm = () => {
       if (error || !data) {
         setError('Formulário não encontrado ou inativo.');
       } else {
-        // Ordena as perguntas pela coluna order_index
         data.questions.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
         setForm(data as FormWithQuestions);
       }
       setIsLoading(false);
     };
-    fetchForm();
+    
+    fetchFormAndUtms();
   }, [subdomain]);
 
   const handleAnswerSelect = (questionId: string, answerOptionId: string) => {
@@ -60,21 +79,19 @@ const PublicForm = () => {
     if (form && currentQuestionIndex < form.questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      // Se for a última pergunta, envia o formulário
       handleSubmit();
     }
   };
 
   const handleSubmit = async () => {
     if (!form) return;
-    setIsLoading(true); // Mostra estado de carregamento no envio
+    setIsLoading(true);
 
     let calculated_score = 0;
     const submitted_data: Record<string, string> = {};
-    const finalAnswers = { ...answers };
 
     for (const question of form.questions) {
-      const answerOptionId = finalAnswers[question.id];
+      const answerOptionId = answers[question.id];
       const selectedOption = question.answer_options.find(opt => opt.id === answerOptionId);
       if (selectedOption) {
         calculated_score += selectedOption.points;
@@ -82,10 +99,12 @@ const PublicForm = () => {
       }
     }
     
+    // ATUALIZAÇÃO: Inserimos os dados UTM na tabela 'submissions'
     await supabase.from('submissions').insert({
       form_id: form.id,
       calculated_score,
-      submitted_data
+      submitted_data,
+      utm_params: utmData, // << DADOS UTM INCLUÍDOS AQUI
     });
 
     if (calculated_score >= form.score_threshold) {
@@ -97,7 +116,9 @@ const PublicForm = () => {
   
   if (isLoading && !form) return <div className="text-center p-10">Carregando formulário...</div>;
   if (error) return <div className="text-center p-10 text-red-500">{error}</div>;
-  if (!form) return null;
+  if (!form || !form.questions || form.questions.length === 0) {
+    return <div className="text-center p-10 text-yellow-600">Este formulário ainda não tem perguntas configuradas.</div>;
+  }
 
   const currentQuestion = form.questions[currentQuestionIndex];
   const progressPercentage = ((currentQuestionIndex + 1) / form.questions.length) * 100;
@@ -115,7 +136,7 @@ const PublicForm = () => {
           />
         </div>
 
-        <div className="bg-white p-8 sm:p-12 rounded-xl shadow-lg relative overflow-hidden">
+        <div className="bg-white p-8 sm:p-12 rounded-xl shadow-lg relative overflow-hidden min-h-[350px]">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentQuestionIndex}
@@ -123,6 +144,7 @@ const PublicForm = () => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -50 }}
               transition={{ duration: 0.4, ease: "easeInOut" }}
+              className="absolute top-8 left-8 right-8 sm:top-12 sm:left-12 sm:right-12"
             >
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-8">
                 {currentQuestion.question_text}
@@ -146,7 +168,7 @@ const PublicForm = () => {
             </motion.div>
           </AnimatePresence>
           
-          <div className="mt-10">
+          <div className="absolute bottom-8 left-8 sm:bottom-12 sm:left-12">
             <Button
               onClick={handleNextQuestion}
               disabled={!answers[currentQuestion.id] || isLoading}
