@@ -1,15 +1,16 @@
-// ARQUIVO NOVO: src/pages/PublicForm.tsx
+// ARQUIVO NOVO: src/pages/PublicForm.tsx (VERSÃO "TYPEFORM")
 
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Database } from '@/types/supabase';
-import { useParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion'; // Importamos a biblioteca de animação
+import { ArrowRight, Check } from 'lucide-react';
 
+// Tipos (sem alteração)
 type AnswerOption = Database['public']['Tables']['answer_options']['Row'];
 type QuestionWithAnswers = Database['public']['Tables']['questions']['Row'] & {
   answer_options: AnswerOption[];
@@ -18,16 +19,17 @@ type FormWithQuestions = Database['public']['Tables']['forms']['Row'] & {
   questions: QuestionWithAnswers[];
 };
 
-interface PublicFormProps {
-  subdomain: string;
-}
-
 const PublicForm = () => {
   const { subdomain } = useParams<{ subdomain: string }>();
+  
+  // Estados para controlar a lógica do formulário
   const [form, setForm] = useState<FormWithQuestions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Estado para controlar as respostas e a pergunta atual
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
   useEffect(() => {
     const fetchForm = async () => {
@@ -41,6 +43,8 @@ const PublicForm = () => {
       if (error || !data) {
         setError('Formulário não encontrado ou inativo.');
       } else {
+        // Ordena as perguntas pela coluna order_index
+        data.questions.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
         setForm(data as FormWithQuestions);
       }
       setIsLoading(false);
@@ -48,19 +52,29 @@ const PublicForm = () => {
     fetchForm();
   }, [subdomain]);
 
-  const handleInputChange = (questionId: string, value: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: value }));
+  const handleAnswerSelect = (questionId: string, answerOptionId: string) => {
+    setAnswers(prev => ({ ...prev, [questionId]: answerOptionId }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleNextQuestion = () => {
+    if (form && currentQuestionIndex < form.questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    } else {
+      // Se for a última pergunta, envia o formulário
+      handleSubmit();
+    }
+  };
+
+  const handleSubmit = async () => {
     if (!form) return;
+    setIsLoading(true); // Mostra estado de carregamento no envio
 
     let calculated_score = 0;
     const submitted_data: Record<string, string> = {};
+    const finalAnswers = { ...answers };
 
     for (const question of form.questions) {
-      const answerOptionId = answers[question.id];
+      const answerOptionId = finalAnswers[question.id];
       const selectedOption = question.answer_options.find(opt => opt.id === answerOptionId);
       if (selectedOption) {
         calculated_score += selectedOption.points;
@@ -68,56 +82,90 @@ const PublicForm = () => {
       }
     }
     
-    // Salva a submissão no banco
     await supabase.from('submissions').insert({
       form_id: form.id,
       calculated_score,
-      submitted_data,
-      // TODO: Capturar e salvar utm_params se existirem na URL
+      submitted_data
     });
 
-    // Redireciona o usuário
     if (calculated_score >= form.score_threshold) {
       window.location.href = form.redirect_good_url;
     } else {
       window.location.href = form.redirect_bad_url;
     }
   };
-
-  if (isLoading) return <div className="text-center p-10">Carregando formulário...</div>;
+  
+  if (isLoading && !form) return <div className="text-center p-10">Carregando formulário...</div>;
   if (error) return <div className="text-center p-10 text-red-500">{error}</div>;
+  if (!form) return null;
+
+  const currentQuestion = form.questions[currentQuestionIndex];
+  const progressPercentage = ((currentQuestionIndex + 1) / form.questions.length) * 100;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-lg bg-white p-8 rounded-xl shadow-lg space-y-6">
-        <h1 className="text-2xl font-bold text-center">{form?.client_name}</h1>
-        {form?.questions.map(q => (
-          <div key={q.id} className="space-y-2">
-            <Label>{q.question_text}</Label>
-            {q.question_type === 'radio' && (
-              <RadioGroup onValueChange={(value) => handleInputChange(q.id, value)}>
-                {q.answer_options.map(opt => (
-                  <div key={opt.id} className="flex items-center space-x-2">
-                    <RadioGroupItem value={opt.id} id={`${q.id}-${opt.id}`} />
-                    <Label htmlFor={`${q.id}-${opt.id}`}>{opt.option_text}</Label>
-                  </div>
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4 font-sans">
+      <div className="w-full max-w-2xl">
+        {/* Barra de Progresso */}
+        <div className="w-full bg-gray-200 rounded-full h-1.5 mb-4">
+          <motion.div 
+            className="bg-blue-600 h-1.5 rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${progressPercentage}%` }}
+            transition={{ duration: 0.5, ease: "easeInOut" }}
+          />
+        </div>
+
+        <div className="bg-white p-8 sm:p-12 rounded-xl shadow-lg relative overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentQuestionIndex}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ duration: 0.4, ease: "easeInOut" }}
+            >
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-8">
+                {currentQuestion.question_text}
+              </h2>
+
+              <RadioGroup 
+                onValueChange={(value) => handleAnswerSelect(currentQuestion.id, value)}
+                className="space-y-4"
+              >
+                {currentQuestion.answer_options.map(opt => (
+                  <Label 
+                    key={opt.id}
+                    htmlFor={opt.id}
+                    className="flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ease-in-out hover:border-blue-500 hover:bg-blue-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50"
+                  >
+                    <RadioGroupItem value={opt.id} id={opt.id} className="h-5 w-5" />
+                    <span className="ml-4 text-lg text-gray-700">{opt.option_text}</span>
+                  </Label>
                 ))}
               </RadioGroup>
-            )}
-            {q.question_type === 'select' && (
-              <Select onValueChange={(value) => handleInputChange(q.id, value)}>
-                <SelectTrigger><SelectValue placeholder="Selecione uma opção" /></SelectTrigger>
-                <SelectContent>
-                  {q.answer_options.map(opt => (
-                    <SelectItem key={opt.id} value={opt.id}>{opt.option_text}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            </motion.div>
+          </AnimatePresence>
+          
+          <div className="mt-10">
+            <Button
+              onClick={handleNextQuestion}
+              disabled={!answers[currentQuestion.id] || isLoading}
+              className="flex items-center gap-2 text-lg px-6 py-6"
+            >
+              {isLoading 
+                ? "Enviando..."
+                : currentQuestionIndex === form.questions.length - 1
+                  ? "Enviar"
+                  : "OK"}
+              {!isLoading && <Check className="w-5 h-5" />}
+            </Button>
           </div>
-        ))}
-        <Button type="submit" className="w-full">Enviar Respostas</Button>
-      </form>
+        </div>
+
+        <p className="text-center text-xs text-gray-400 mt-4">
+          Powered by LeadScorer Pro
+        </p>
+      </div>
     </div>
   );
 };
